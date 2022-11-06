@@ -1,15 +1,19 @@
 import { Observable, combineLatest } from 'rxjs';
 import {
   map,
+  filter,
+  pairwise,
   distinctUntilChanged,
   switchMap,
   startWith,
   tap,
   debounceTime,
-} from 'rxjs';
+} from 'rxjs/operators';
 import { Injectable } from '@angular/core';
+import { Router, NavigationEnd, RoutesRecognized } from '@angular/router';
 import { FormControl, Validators } from '@angular/forms';
 import { Pagination } from '../models/pagination.model';
+import { RouteHistory } from '../models/route.history.model';
 import { User } from '../models/user.model';
 import { UserState, initialState } from '../models/state.model';
 import { DataAccessApi } from './data-api.service';
@@ -36,6 +40,10 @@ export class DataAccessService extends DataAccessState<UserState> {
     (state: UserState) => state.users
   );
 
+  readonly routeHistory$: Observable<RouteHistory | undefined> = this.select(
+    (state: UserState) => state.routeHistory
+  );
+
   readonly vm$: Observable<UserState> = combineLatest([
     this.pagination$,
     this.criteria$,
@@ -57,7 +65,11 @@ export class DataAccessService extends DataAccessState<UserState> {
     )
   );
 
-  constructor(private dataApi: DataAccessApi) {
+  private previousUrl: string = '';
+  private currentUrl: string = '';
+  private routeHistory: string[] = [];
+
+  constructor(private dataApi: DataAccessApi, private readonly router: Router) {
     super(initialState);
 
     combineLatest([this.criteria$, this.pagination$])
@@ -83,6 +95,22 @@ export class DataAccessService extends DataAccessState<UserState> {
         tap((data) => console.log(data))
       )
       .subscribe();
+
+    this.routeHistory$.pipe(tap((data) => console.log(data))).subscribe();
+
+    this.router.events
+      .pipe(
+        filter(
+          (event): event is RoutesRecognized =>
+            event instanceof RoutesRecognized
+        ),
+        pairwise(),
+        tap((events: RoutesRecognized[]) => {
+          const previousUrl: string = events[0].urlAfterRedirects;
+          console.log(previousUrl);
+        })
+      )
+      .subscribe();
   }
 
   buildSearchTermControl(): FormControl {
@@ -96,6 +124,30 @@ export class DataAccessService extends DataAccessState<UserState> {
       )
       .subscribe();
     return searchTerm;
+  }
+
+  buildRouteHistory(): void {
+    this.router.events
+      .pipe(
+        filter(
+          (event): event is NavigationEnd => event instanceof NavigationEnd
+        ),
+        tap((event: NavigationEnd) => {
+          const tempUrl: string = this.currentUrl;
+          this.previousUrl = tempUrl;
+          this.currentUrl = event.urlAfterRedirects;
+          this.routeHistory.push(event.urlAfterRedirects);
+          this.setState({
+            ...this.state,
+            routeHistory: {
+              previousUrl: this.previousUrl,
+              currentUrl: this.currentUrl,
+              routes: this.routeHistory,
+            },
+          });
+        })
+      )
+      .subscribe();
   }
 
   getStateSnapshot(): UserState {
