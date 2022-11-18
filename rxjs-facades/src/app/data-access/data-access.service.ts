@@ -1,4 +1,4 @@
-import { Observable, combineLatest } from 'rxjs';
+import { Observable, of, combineLatest } from 'rxjs';
 import {
   map,
   filter,
@@ -10,7 +10,13 @@ import {
   debounceTime,
 } from 'rxjs/operators';
 import { Injectable } from '@angular/core';
-import { Router, NavigationEnd, RoutesRecognized } from '@angular/router';
+import {
+  ActivatedRoute,
+  Router,
+  NavigationEnd,
+  RoutesRecognized,
+  Params,
+} from '@angular/router';
 import { FormControl, Validators } from '@angular/forms';
 import { Pagination } from '../models/pagination.model';
 import { RouteHistory } from '../models/route.history.model';
@@ -69,7 +75,11 @@ export class DataAccessService extends DataAccessState<UserState> {
   private currentUrl: string = '';
   private routeHistory: string[] = [];
 
-  constructor(private dataApi: DataAccessApi, private readonly router: Router) {
+  constructor(
+    private dataApi: DataAccessApi,
+    private readonly router: Router,
+    private readonly route: ActivatedRoute
+  ) {
     super(initialState);
 
     combineLatest([this.criteria$, this.pagination$])
@@ -108,6 +118,17 @@ export class DataAccessService extends DataAccessState<UserState> {
         tap((events: RoutesRecognized[]) => {
           const previousUrl: string = events[0].urlAfterRedirects;
           console.log(previousUrl);
+        })
+      )
+      .subscribe();
+
+    this.route.params
+      .pipe(
+        filter((event: Params) => event instanceof NavigationEnd),
+        map((event: Params) => this.route.firstChild),
+        switchMap((route: ActivatedRoute | null) => route?.data ?? of({})),
+        tap((data) => {
+          console.log('routing: ', data);
         })
       )
       .subscribe();
